@@ -7,6 +7,9 @@ Steps:
   - Step: Set up job
     Status: completed
     Conclusion: success
+  - Step: Initialize containers
+    Status: completed
+    Conclusion: success
   - Step: Checkout code
     Status: completed
     Conclusion: success
@@ -22,6 +25,9 @@ Steps:
   - Step: Run unit tests with nose
     Status: completed
     Conclusion: success
+  - Step: Post Set up Node.js
+    Status: completed
+    Conclusion: success
   - Step: Post Set up Python
     Status: completed
     Conclusion: success
@@ -31,4 +37,3 @@ Steps:
   - Step: Complete job
     Status: completed
     Conclusion: success
-
