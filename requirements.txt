@@ -1,0 +1,5 @@
+flask>=2.2.0
+nose
+pinocchio
+coverage
+flake8

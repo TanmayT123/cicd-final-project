@@ -1,0 +1,109 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: cd-pipeline
+spec:
+  workspaces:
+    - name: pipeline-workspace
+  tasks:
+
+    - name: cleanup
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: cleanup
+            image: alpine:3
+            workingDir: $(workspaces.source.path)
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                echo "Removing all files from workspace..."
+                rm -rf $(workspaces.source.path)/src
+                echo "Workspace cleaned successfully."
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+
+    - name: clone
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      workspaces:
+        - name: output
+          workspace: pipeline-workspace
+      params:
+        - name: url
+          value: https://github.com/TanmayT123/cicd-final-project.git
+        - name: revision
+          value: main
+      runAfter:
+        - cleanup
+
+    - name: lint
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: flake8-lint
+            image: python:3.9-slim
+            workingDir: $(workspaces.source.path)
+            script: |
+              #!/bin/sh
+              pip install flake8 --quiet
+              flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+              flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+              echo "Linting completed."
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      runAfter:
+        - clone
+
+    - name: nose
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: nosetests
+            image: python:3.9-slim
+            workingDir: $(workspaces.source.path)
+            script: |
+              #!/bin/sh
+              pip install -r requirements.txt --quiet
+              pip install nose pinocchio coverage --quiet
+              nosetests -v --with-spec --spec-color --with-coverage --cover-package=app
+              echo "All tests passed."
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      runAfter:
+        - lint
+
+    - name: build
+      taskRef:
+        name: buildah
+        kind: ClusterTask
+      params:
+        - name: IMAGE
+          value: image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/cicd-final-project:latest
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      runAfter:
+        - nose
+
+    - name: deploy
+      taskRef:
+        name: openshift-client
+        kind: ClusterTask
+      params:
+        - name: SCRIPT
+          value: |
+            oc get deployment cicd-final-project 2>/dev/null && \
+              oc set image deployment/cicd-final-project \
+                cicd-final-project=image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/cicd-final-project:latest || \
+              oc new-app cicd-final-project:latest
+            echo "Deployment complete."
+      runAfter:
+        - build
